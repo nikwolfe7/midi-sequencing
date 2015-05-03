@@ -1,5 +1,17 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MidiEvent;
@@ -9,6 +21,8 @@ import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Sequence;
 import javax.sound.midi.ShortMessage;
 import javax.sound.midi.Track;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class MidiDriver {
 
@@ -30,27 +44,81 @@ public class MidiDriver {
       "A#", "B" };
 
   public static void main(String[] args) throws Exception {
-    File file = new File("." + sep + MIDI_classical + sep + "Bach" + sep
-            + "Bwv0565-Toccata-and-Fugue-In-Dm-A.mid");
-    doSequencing(file);
+    
+    String filename = "." + sep + MIDI_classical + sep + "Bach" + sep
+            + "Bwv0565-Toccata-and-Fugue-In-Dm-A.mid";
+    
+    
+  }
+  
+  private static void processFolder(String folder) throws Exception {
+    List<String> files = getFilesInDir(folder); 
+    for(String filename : files) {
+      File file = new File(filename);
+      Map<Long, ArrayList<Integer>> tracks = doSequencing(file);
+      printToFile(tracks, filename);
+    }
   }
 
-  public static void doSequencing(File file) throws Exception {
-    readSequence(getSequence(file));
+  private static List<String> getFilesInDir(String directory) throws IOException {
+    List<String> files = new LinkedList<String>();
+    Files.walk(Paths.get(directory)).forEach(filePath -> {
+      if (Files.isRegularFile(filePath)) {
+          files.add(filePath.toString());
+      }
+    });
+    ListIterator<String> iter = files.listIterator();
+    while(iter.hasNext()) {
+      String file = iter.next();
+      if(!file.toLowerCase().endsWith(".mid")) {
+        System.out.println(file);
+        iter.remove();
+      }
+    }
+    return files;
   }
 
-  public static void readSequence(Sequence seq) {
+  private static void printToFile(Map<Long, ArrayList<Integer>> tracks, String filename)
+          throws IOException {
+    filename = filename.replace(".mid", ".txt");
+    File file = new File(filename);
+    FileWriter writer = new FileWriter(file);
+    LinkedList<Entry<Long, ArrayList<Integer>>> results = new LinkedList<Map.Entry<Long, ArrayList<Integer>>>(
+            tracks.entrySet());
+    Collections.sort(results, new Comparator<Map.Entry<Long, ArrayList<Integer>>>() {
+      public int compare(Entry<Long, ArrayList<Integer>> o1, Entry<Long, ArrayList<Integer>> o2) {
+        return o1.getKey().compareTo(o2.getKey());
+      }
+    });
+    for (Entry<Long, ArrayList<Integer>> elem : results) {
+      ArrayList<Integer> intList = elem.getValue();
+      Collections.sort(intList, new Comparator<Integer>() {
+        public int compare(Integer o1, Integer o2) {
+          return o1.compareTo(o2);
+        }
+      });
+      String joinedStr = StringUtils.join(intList, "_");
+      System.out.println(joinedStr);
+      writer.write(joinedStr + "\n");
+    }
+    writer.close();
+  }
+
+  public static Map<Long, ArrayList<Integer>> doSequencing(File file) throws Exception {
+    return readSequence(getSequence(file));
+  }
+
+  public static Map<Long, ArrayList<Integer>> readSequence(Sequence seq) {
     int trackNumber = 0;
+    Map<Long, ArrayList<Integer>> map = new HashMap<Long, ArrayList<Integer>>();
     for (Track track : seq.getTracks()) {
       trackNumber++;
       System.out.println("Track: " + trackNumber + ": size = " + track.size() + "\n");
       for (int i = 0; i < track.size(); i++) {
         MidiEvent event = track.get(i);
         MidiMessage message = event.getMessage();
-        System.out.print("t=" + event.getTick() + ": ");
         if (message instanceof ShortMessage) {
           ShortMessage sm = (ShortMessage) message;
-          System.out.print("Channel: " + sm.getChannel() + " ");
           int key = sm.getData1();
           int octave = (key / 12) - 1;
           int note = key % 12;
@@ -58,20 +126,29 @@ public class MidiDriver {
           int velocity = sm.getData2();
           String noteStatus = "";
           if (sm.getCommand() == NOTE_OFF) {
-            noteStatus = "NOTE_OFF";
+            noteStatus = "note_off";
           } else if (sm.getCommand() == NOTE_ON) {
-            noteStatus = "NOTE_ON";
+            noteStatus = "note_on";
           } else {
-            System.out.println("Command: " + sm.getCommand());
+            // System.out.println("Command: " + sm.getCommand());
           }
-          if (noteStatus != "") {
-            System.out.println(noteStatus + " " + noteName + octave + " key = " + key
-                    + " veloctiy: " + velocity);
+          if (noteStatus != "" && velocity > 0) {
+            String noteWord = "ch" + sm.getChannel() + "_" + noteStatus + "_" + noteName + octave
+                    + "_key" + key;// + "_vel" + velocity;
+            if (map.containsKey(event.getTick())) {
+              map.get(event.getTick()).add(key);
+            } else {
+              map.put(event.getTick(), new ArrayList<Integer>());
+              map.get(event.getTick()).add(key);
+            }
+            // System.out.print("\nt=" + event.getTick() + ": " + printable);
+            System.out.print("\nt=" + event.getTick() + ": " + noteWord);
           }
         }
       }
       System.out.println();
     }
+    return map;
   }
 
   /**
