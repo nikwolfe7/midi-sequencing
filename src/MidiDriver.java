@@ -44,19 +44,19 @@ public class MidiDriver {
       "A#", "B" };
 
   public static void main(String[] args) throws Exception {
-    
-    String filename = "." + sep + MIDI_classical + sep + "Bach" + sep
-            + "Bwv0565-Toccata-and-Fugue-In-Dm-A.mid";
-    
-    
+    processFolder("test");
+    processFolder(MIDI_classical);
+    processFolder(MIDI_hip_hop_rap);
+    processFolder(MIDI_rock_metal_country);
+    processFolder(MIDICheck);
   }
-  
+
   private static void processFolder(String folder) throws Exception {
-    List<String> files = getFilesInDir(folder); 
-    for(String filename : files) {
+    List<String> files = getFilesInDir(folder);
+    for (String filename : files) {
       File file = new File(filename);
-      Map<Long, ArrayList<Integer>> tracks = doSequencing(file);
-      printToFile(tracks, filename);
+      Map<Long, ArrayList<Integer>> timesteps = doSequencing(file);
+      printToFile(timesteps, filename);
     }
   }
 
@@ -64,14 +64,14 @@ public class MidiDriver {
     List<String> files = new LinkedList<String>();
     Files.walk(Paths.get(directory)).forEach(filePath -> {
       if (Files.isRegularFile(filePath)) {
-          files.add(filePath.toString());
+        files.add(filePath.toString());
       }
     });
     ListIterator<String> iter = files.listIterator();
-    while(iter.hasNext()) {
+    while (iter.hasNext()) {
       String file = iter.next();
-      if(!file.toLowerCase().endsWith(".mid")) {
-        System.out.println(file);
+      if (!file.toLowerCase().endsWith(".mid")) {
+        // System.out.println(file);
         iter.remove();
       }
     }
@@ -98,7 +98,7 @@ public class MidiDriver {
         }
       });
       String joinedStr = StringUtils.join(intList, "_");
-      System.out.println(joinedStr);
+      // System.out.println(joinedStr);
       writer.write(joinedStr + "\n");
     }
     writer.close();
@@ -111,42 +111,44 @@ public class MidiDriver {
   public static Map<Long, ArrayList<Integer>> readSequence(Sequence seq) {
     int trackNumber = 0;
     Map<Long, ArrayList<Integer>> map = new HashMap<Long, ArrayList<Integer>>();
-    for (Track track : seq.getTracks()) {
-      trackNumber++;
-      System.out.println("Track: " + trackNumber + ": size = " + track.size() + "\n");
-      for (int i = 0; i < track.size(); i++) {
-        MidiEvent event = track.get(i);
-        MidiMessage message = event.getMessage();
-        if (message instanceof ShortMessage) {
-          ShortMessage sm = (ShortMessage) message;
-          int key = sm.getData1();
-          int octave = (key / 12) - 1;
-          int note = key % 12;
-          String noteName = NOTE_NAMES[note];
-          int velocity = sm.getData2();
-          String noteStatus = "";
-          if (sm.getCommand() == NOTE_OFF) {
-            noteStatus = "note_off";
-          } else if (sm.getCommand() == NOTE_ON) {
-            noteStatus = "note_on";
-          } else {
-            // System.out.println("Command: " + sm.getCommand());
-          }
-          if (noteStatus != "" && velocity > 0) {
-            String noteWord = "ch" + sm.getChannel() + "_" + noteStatus + "_" + noteName + octave
-                    + "_key" + key;// + "_vel" + velocity;
-            if (map.containsKey(event.getTick())) {
-              map.get(event.getTick()).add(key);
+    if (seq != null) {
+      for (Track track : seq.getTracks()) {
+        trackNumber++;
+        System.out.println("Track: " + trackNumber + ": size = " + track.size() + "\n");
+        for (int i = 0; i < track.size(); i++) {
+          MidiEvent event = track.get(i);
+          MidiMessage message = event.getMessage();
+          if (message instanceof ShortMessage) {
+            ShortMessage sm = (ShortMessage) message;
+            int key = sm.getData1();
+            int octave = (key / 12) - 1;
+            int note = key % 12;
+            String noteName = NOTE_NAMES[note];
+            int velocity = sm.getData2();
+            String noteStatus = "";
+            if (sm.getCommand() == NOTE_OFF) {
+              noteStatus = "note_off";
+            } else if (sm.getCommand() == NOTE_ON) {
+              noteStatus = "note_on";
             } else {
-              map.put(event.getTick(), new ArrayList<Integer>());
-              map.get(event.getTick()).add(key);
+              // System.out.println("Command: " + sm.getCommand());
             }
-            // System.out.print("\nt=" + event.getTick() + ": " + printable);
-            System.out.print("\nt=" + event.getTick() + ": " + noteWord);
+            if (noteStatus != "" && velocity > 0) {
+              String noteWord = "ch" + sm.getChannel() + "_" + noteStatus + "_" + noteName + octave
+                      + "_key" + key;// + "_vel" + velocity;
+              if (map.containsKey(event.getTick())) {
+                map.get(event.getTick()).add(key);
+              } else {
+                map.put(event.getTick(), new ArrayList<Integer>());
+                map.get(event.getTick()).add(key);
+              }
+              // System.out.print("\nt=" + event.getTick() + ": " + printable);
+              // System.out.print("\nt=" + event.getTick() + ": " + noteWord);
+            }
           }
         }
+        // System.out.println();
       }
-      System.out.println();
     }
     return map;
   }
@@ -163,8 +165,17 @@ public class MidiDriver {
    * @throws IOException
    *           if an I/O error happened while reading
    */
-  public static Sequence getSequence(File file) throws Exception {
-    return MidiSystem.getSequence(file);
+  public static Sequence getSequence(File file) {
+    try {
+      return MidiSystem.getSequence(file);
+    } catch (InvalidMidiDataException e) {
+      System.out.println("File: " + file.toString());
+      e.printStackTrace();
+    } catch (IOException e) {
+      System.out.println("File: " + file.toString());
+      e.printStackTrace();
+    }
+    return null;
   }
 
 }
